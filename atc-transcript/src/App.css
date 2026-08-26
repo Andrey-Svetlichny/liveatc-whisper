@@ -1,0 +1,145 @@
+main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  flex-grow: 1;
+  min-height: 0;
+  padding: 32px;
+  box-sizing: border-box;
+
+  @media (max-width: 1024px) {
+    padding: 24px 20px;
+    gap: 18px;
+  }
+}
+
+.waveform {
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  min-height: 168px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.play {
+  font-family: var(--sans);
+  font-size: 20px;
+  line-height: 1;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 2px solid transparent;
+  transition:
+    border-color 0.3s,
+    box-shadow 0.3s;
+
+  &:hover:not(:disabled) {
+    border-color: var(--accent-border);
+    box-shadow: var(--shadow);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+}
+
+.time {
+  font-family: var(--mono);
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+}
+
+.transcript {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  text-align: left;
+
+  ol {
+    list-style: none;
+    margin: 0;
+    padding: 8px;
+  }
+}
+
+.segment {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 16px;
+  text-align: left;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s;
+
+  &:hover {
+    background: var(--social-bg);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  &.active {
+    color: var(--text-h);
+    background: var(--accent-bg);
+    border-left-color: var(--accent);
+  }
+
+  @media (max-width: 1024px) {
+    font-size: 15px;
+    gap: 8px;
+    padding: 8px;
+  }
+}
+
+.segment-time {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.segment-text {
+  flex: 1 1 auto;
+}
