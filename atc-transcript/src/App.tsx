@@ -12,6 +12,12 @@ type LoadedTranscript = { url: string; segments: Segment[] };
 /** Larger than any recording, so a seconds-based label rule never matches. */
 const UNREACHABLE_INTERVAL = 1e9;
 
+/**
+ * Seconds of audio to play before a segment's timestamp. Starting exactly on it
+ * clips the attack of the first word, which makes it hard to catch.
+ */
+const PLAY_LEAD_IN = 0.2;
+
 /** Pull the palette out of the CSS custom properties so the waveform follows the theme. */
 function themeColors() {
   const style = getComputedStyle(document.documentElement);
@@ -138,7 +144,7 @@ function App() {
   const handlePlayFrom = useCallback((time: number) => {
     const ws = wavesurferRef.current;
     if (!ws) return;
-    ws.setTime(time);
+    ws.setTime(Math.max(0, time - PLAY_LEAD_IN));
     ws.play().catch((error: unknown) => {
       console.error("Could not start playback", error);
     });
