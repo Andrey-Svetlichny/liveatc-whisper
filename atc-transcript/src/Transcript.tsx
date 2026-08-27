@@ -25,7 +25,13 @@ function Transcript({
     activeRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [activeIndex]);
 
-  if (segments.length === 0) return null;
+  if (segments.length === 0) {
+    return (
+      <section className="transcript empty" aria-label="Transcript">
+        <p>No transcript for this recording.</p>
+      </section>
+    );
+  }
 
   return (
     <section className="transcript" aria-label="Transcript">
