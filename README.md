@@ -27,3 +27,7 @@ whisper-cli -m ~/models/whisper/ggml-medium.en.bin -f clean_sample.wav -l en --p
 ffmpeg -i ENZV5-Gnd-Aug-24-2026-1530Z.mp3 -af "highpass=f=300, lowpass=f=3400, volume=1.5" -ar 16000 -ac 1 rec.wav
 
 whisper-cli -m ~/models/whisper/ggml-medium.en.bin --vad -vm ~/models/whisper/ggml-silero-v6.2.0.bin -f rec.wav -l en --prompt "Norwegian place names: Stavanger, Sandnes, Sola. ATC terms: request taxi, XRay, correction"
+
+# fix broken MP3 header
+
+ffmpeg -i ENZV5-Gnd-Aug-24-2026-1530Z_0.mp3 -c:a copy ENZV5-Gnd-Aug-24-2026-1530Z.mp3
