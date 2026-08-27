@@ -8,6 +8,10 @@ brew install whisper-cpp
 
 https://huggingface.co/ggerganov/whisper.cpp/tree/main
 
+### vad
+
+https://huggingface.co/ggml-org/whisper-vad/blob/main/ggml-silero-v6.2.0.bin
+
 # extract test audio and prepare for Whisper
 
 ffmpeg -ss 27:15 -to 30:00 -i ENZV5-Gnd-Aug-24-2026-1530Z.mp3 -c copy test_sample.mp3
@@ -17,3 +21,9 @@ ffmpeg -i test_sample.mp3 -af "highpass=f=300, lowpass=f=3400, volume=1.5" -ar 1
 ## whisper with local names
 
 whisper-cli -m ~/models/whisper/ggml-medium.en.bin -f clean_sample.wav -l en --prompt "Norwegian place names: Stavanger, Sandnes, Sola. ATC terms: request taxi, XRay, correction" > transcript.txt
+
+# process real file
+
+ffmpeg -i ENZV5-Gnd-Aug-24-2026-1530Z.mp3 -af "highpass=f=300, lowpass=f=3400, volume=1.5" -ar 16000 -ac 1 rec.wav
+
+whisper-cli -m ~/models/whisper/ggml-medium.en.bin --vad -vm ~/models/whisper/ggml-silero-v6.2.0.bin -f rec.wav -l en --prompt "Norwegian place names: Stavanger, Sandnes, Sola. ATC terms: request taxi, XRay, correction"
