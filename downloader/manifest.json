@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "LiveATC Full Day Downloader",
+  "version": "1.0",
+  "description": "Download 24 hours of LiveATC archives in one click.",
+  "permissions": ["activeTab", "downloads"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.liveatc.net/archive.php*"],
+      "js": ["content.js"]
+    }
+  ]
+}
