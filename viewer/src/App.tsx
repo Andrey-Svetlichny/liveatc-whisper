@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WaveSurfer from "wavesurfer.js";
 import Timeline from "wavesurfer.js/dist/plugins/timeline.esm.js";
 import records, { type RecordFile } from "virtual:records";
 import RecordList from "./RecordList";
 import Transcript from "./Transcript";
-import { formatTime, parseTranscript, type Segment } from "./segments";
+import {
+  formatTime,
+  normalizeSegmentText,
+  parseTranscript,
+  serializeTranscript,
+  stripMark,
+  type Segment,
+} from "./segments";
+import { clearDraft, readDraft, writeDraft, type Edits } from "./drafts";
 import "./App.css";
 
-type LoadedTranscript = { url: string; segments: Segment[] };
+/**
+ * The transcript as it sits on disk, plus the corrections made on top of it. Keeping
+ * the two apart is what lets a line be reverted, and what makes "is this edited?"
+ * answerable without diffing against a second copy of the text.
+ */
+type LoadedTranscript = { url: string; base: Segment[]; edits: Edits };
 
 /** Larger than any recording, so a seconds-based label rule never matches. */
 const UNREACHABLE_INTERVAL = 1e9;
@@ -38,11 +51,26 @@ function App() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [loaded, setLoaded] = useState<LoadedTranscript | null>(null);
+  const [status, setStatus] = useState("");
 
   // Derived, not stored: segments only count when they belong to the selected
   // record, so switching records never flashes the previous transcript.
-  const segments =
-    loaded && loaded.url === selected?.transcriptUrl ? loaded.segments : [];
+  const current = loaded && loaded.url === selected?.transcriptUrl ? loaded : null;
+
+  const segments = useMemo(() => {
+    if (!current) return [];
+    return current.base.map((segment) =>
+      Object.hasOwn(current.edits, segment.start)
+        ? { ...segment, text: current.edits[segment.start] }
+        : segment,
+    );
+  }, [current]);
+
+  // Passed down so a corrected row can mark itself without re-deriving the diff there.
+  const editedStarts = useMemo(
+    () => new Set(Object.keys(current?.edits ?? {}).map(Number)),
+    [current],
+  );
 
   useEffect(() => {
     const ws = WaveSurfer.create({
@@ -126,7 +154,12 @@ function App() {
         return res.text();
       })
       .then((text) => {
-        if (!ignore) setLoaded({ url, segments: parseTranscript(text) });
+        // Corrections are restored here rather than held in memory, so they survive a
+        // reload and switching away and back -- which the guard above would otherwise
+        // discard along with the rest of the previous record's transcript.
+        if (!ignore) {
+          setLoaded({ url, base: parseTranscript(text), edits: readDraft(url) });
+        }
       })
       .catch((error: unknown) => {
         console.error("Could not load the transcript", error);
@@ -136,6 +169,18 @@ function App() {
       ignore = true;
     };
   }, [selected]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    if (Object.keys(loaded.edits).length === 0) clearDraft(loaded.url);
+    else writeDraft(loaded.url, loaded.edits);
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!status) return;
+    const timer = setTimeout(() => setStatus(""), 3000);
+    return () => clearTimeout(timer);
+  }, [status]);
 
   const togglePlay = useCallback(() => {
     wavesurferRef.current?.playPause();
@@ -153,6 +198,58 @@ function App() {
       console.error("Could not start playback", error);
     });
   }, []);
+
+  const handleEditSegment = useCallback((start: number, text: string) => {
+    const corrected = normalizeSegmentText(text);
+
+    setLoaded((prev) => {
+      if (!prev) return prev;
+      const original = prev.base.find((segment) => segment.start === start);
+      if (!original) return prev;
+
+      const edits = { ...prev.edits };
+      // Emptying a line restores what was transcribed rather than blanking it: an
+      // empty line would not survive the next parse, and deleting segments is not
+      // something this editor does. A line left holding nothing but its `#` counts as
+      // empty too, or it would render as a blank coloured row.
+      if (!stripMark(corrected) || corrected === original.text) delete edits[start];
+      else edits[start] = corrected;
+
+      return { ...prev, edits };
+    });
+  }, []);
+
+  const handleDiscardEdits = useCallback(() => {
+    setLoaded((prev) => (prev ? { ...prev, edits: {} } : prev));
+    setStatus("Corrections discarded");
+  }, []);
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard
+      .writeText(serializeTranscript(segments))
+      .then(() => setStatus("Transcript copied"))
+      .catch((error: unknown) => {
+        console.error("Could not copy the transcript", error);
+        setStatus("Could not copy -- see the console");
+      });
+  }, [segments]);
+
+  const handleDownload = useCallback(() => {
+    if (!selected) return;
+
+    // A Blob built from a JS string is UTF-8 with no BOM, which is what the files on
+    // disk are -- several transcripts carry names like "Hellebas" with an umlaut.
+    const blob = new Blob([serializeTranscript(segments)], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${selected.name}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setStatus(`Downloaded ${selected.name}.txt`);
+  }, [segments, selected]);
 
   return (
     <>
@@ -183,11 +280,38 @@ function App() {
           </span>
         </div>
 
+        {segments.length > 0 && (
+          <div className="transcript-bar">
+            <span className="transcript-status" role="status">
+              {status ||
+                (editedStarts.size > 0
+                  ? `${editedStarts.size} line${editedStarts.size === 1 ? "" : "s"} corrected -- not yet saved to disk`
+                  : "")}
+            </span>
+            {editedStarts.size > 0 && (
+              <button type="button" className="action" onClick={handleDiscardEdits}>
+                Discard
+              </button>
+            )}
+            <button type="button" className="action" onClick={handleCopy}>
+              Copy
+            </button>
+            <button type="button" className="action" onClick={handleDownload}>
+              Download .txt
+            </button>
+          </div>
+        )}
+
         <Transcript
+          // Remounting on record switch drops any half-finished edit along with the
+          // scroll position, instead of carrying it over to a different recording.
+          key={selected?.transcriptUrl ?? "none"}
           segments={segments}
           currentTime={currentTime}
+          editedStarts={editedStarts}
           onSeek={handleSeek}
           onPlayFrom={handlePlayFrom}
+          onEditSegment={handleEditSegment}
         />
       </main>
     </>

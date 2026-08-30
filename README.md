@@ -58,3 +58,27 @@ ffmpeg -i seg_0174_434-0180_790.wav -af "volume=11dB" rec.wav
 # parse
 
 whisper-cli -m ~/models/whisper/ggml-medium.en.bin -f rec.wav -l en --prompt "Hello Ground, Finnair, taxi via T Q stand 13"
+
+---
+
+# correct a transcript in the viewer
+
+Click the pencil on a transcript line to fix what Whisper misheard. Enter or clicking away
+commits, Escape cancels, and clearing a line restores the original text. Corrected lines are
+marked in the margin.
+
+Start a line's text with `#` to flag it -- the viewer colours the whole row and hides the `#`,
+which is visible again in edit mode, where you add or remove it. The `#` is kept in the file:
+
+[00:02:54.434 --> 00:02:56.034]  # Hello Ground, Niner 2-7.
+
+Corrections live in the browser's localStorage, per recording -- they survive a reload and
+switching between recordings, but nothing is written to disk. The app is fully static (no API),
+so exporting is manual: **Download .txt** produces a file byte-identical in format to what
+transcribe.sh writes, and you move it into place.
+
+mv ~/Downloads/ENZV5-Gnd-Aug-24-2026-1530Z.txt audio/GND/
+cp audio/GND/ENZV5-Gnd-Aug-24-2026-1530Z.txt viewer/public/audio/
+
+The second copy is the same manual mirroring step the MP3 header fix needs -- viewer/public/audio
+is a separate copy of the files, not a symlink.
