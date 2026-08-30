@@ -47,6 +47,9 @@ function App() {
   useEffect(() => {
     const ws = WaveSurfer.create({
       container: containerRef.current!,
+      // original LiveATC's mp3s carry no Xing header,
+      // backend: "WebAudio" can fix duration shift, but slow down loading
+      // backend: "WebAudio",
       height: 128,
       barWidth: 2,
       barGap: 1,
@@ -118,7 +121,8 @@ function App() {
 
     fetch(url)
       .then((res) => {
-        if (!res.ok) throw new Error(`Transcript request failed: ${res.status}`);
+        if (!res.ok)
+          throw new Error(`Transcript request failed: ${res.status}`);
         return res.text();
       })
       .then((text) => {
