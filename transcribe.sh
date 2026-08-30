@@ -12,19 +12,20 @@ AUDIO_DIR="${1:-audio}"
 WHISPER="whisper-cli"
 MODEL="${MODEL:-$HOME/models/whisper/ggml-medium.en.bin}"
 
-NOISE="-50dB"        # everything below this counts as silence
-DUR_SILENCE="0.3"    # ...for at least this long
-MIN_DUR="0.05"       # drop speech intervals shorter than this
-PEAK_DB="-3"         # normalization target: leave 3 dB of headroom
+NOISE="-50dB"     # everything below this counts as silence
+DUR_SILENCE="0.3" # ...for at least this long
+MIN_DUR="0.05"    # drop speech intervals shorter than this
+PEAK_DB="-3"      # normalization target: leave 3 dB of headroom
 
 # Shaped like a real ENZV Ground exchange, which primes callsigns far better than a
 # keyword list does -- same prompt as transcript/transcribe.py, where it was picked by
 # A/B-ing over these recordings. Keep it that way: bare keyword lists bleed into the
 # output as callsigns, and the numbers are deliberately unlike any real transmission.
-PROMPT="Stavanger Sola Ground. Scandinavian 871, taxi via Romeo, Tango, hold short \
+PROMPT="Aviation radiotelephony. Stavanger Sola Ground. Scandinavian 871, taxi via Romeo, Tango, hold short \
 runway 36. Norwegian 512, push and start approved, QNH 1008, stand 21. \
-Viking 1362, stand 22, information Bravo, requesting departure clearance. \
-Are you able to lift your clearance via datalink? Cleared via Victor, \
+Viking 1362, stand 22, Information Bravo, requesting departure clearance. \
+Sola Tower hello. \
+Cleared via VIGDEL, \
 2000 feet and below, squawk 5271, readback correct."
 
 # Only ever auto-remove a directory we made ourselves.
@@ -58,8 +59,8 @@ speech_intervals() {
 
   ffmpeg -hide_banner -i "$src" -af "silencedetect=noise=${NOISE}:d=${DUR_SILENCE}" \
     -f null - 2>&1 |
-  sed -n -E 's/.*silence_start: ([0-9.]+).*/START \1/p; s/.*silence_end: ([0-9.]+).*/END \1/p' |
-  awk -v dur="$total" -v min_dur="$MIN_DUR" '
+    sed -n -E 's/.*silence_start: ([0-9.]+).*/START \1/p; s/.*silence_end: ([0-9.]+).*/END \1/p' |
+    awk -v dur="$total" -v min_dur="$MIN_DUR" '
     $1=="START" {
       s=prev_end+0; e=$2+0
       if (e - s > min_dur) print s, e
@@ -97,7 +98,7 @@ for src in "${files[@]}"; do
 
   # Built up here and moved into place only once the file is done, so an interrupted
   # run never leaves a truncated .txt that the skip above would take for finished.
-  : > "$WORK/out.txt"
+  : >"$WORK/out.txt"
   n=0
 
   while read -r start end; do
@@ -113,7 +114,7 @@ for src in "${files[@]}"; do
     # transcript is left on the screen and never reaches disk. Let it fail, and let the
     # empty-peak check below do the job it was written for.
     peak=$(ffmpeg -nostdin -i "$WORK/raw.wav" -af volumedetect -f null - 2>&1 |
-           sed -nE 's/.*max_volume: ([-0-9.]+) dB.*/\1/p' || true)
+      sed -nE 's/.*max_volume: ([-0-9.]+) dB.*/\1/p' || true)
     if [ -z "$peak" ]; then
       echo "  skip ${start}-${end}: silent or unreadable" >&2
       continue
@@ -127,7 +128,7 @@ for src in "${files[@]}"; do
 
     # Quiet unless it actually fails -- the ggml backend chatter would bury the output.
     if ! "$WHISPER" -m "$MODEL" -f "$seg.wav" -l en -nt -np --prompt "$PROMPT" \
-         -otxt -of "$seg" > "$WORK/whisper.log" 2>&1; then
+      -otxt -of "$seg" >"$WORK/whisper.log" 2>&1; then
       cat "$WORK/whisper.log" >&2
       exit 1
     fi
@@ -142,14 +143,14 @@ for src in "${files[@]}"; do
       continue
     fi
 
-    text=$(tr '\n' ' ' < "$seg.txt" | sed -E 's/^ +| +$//g; s/ +/ /g' || true)
+    text=$(tr '\n' ' ' <"$seg.txt" | sed -E 's/^ +| +$//g; s/ +/ /g' || true)
     if [ -z "$text" ] || [ "$text" = "[BLANK_AUDIO]" ]; then
       continue
     fi
 
     line="[$(fmt_ts "$start") --> $(fmt_ts "$end")]  $text"
     echo "$line"
-    echo "$line" >> "$WORK/out.txt"
+    echo "$line" >>"$WORK/out.txt"
     n=$((n + 1))
   done < <(speech_intervals "$src")
 
