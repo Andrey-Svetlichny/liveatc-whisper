@@ -32,7 +32,12 @@ whisper-cli -m ~/models/whisper/ggml-medium.en.bin --vad -vm ~/models/whisper/gg
 
 # fix broken MP3 header
 
-ffmpeg -i ENZV5-Gnd-Aug-24-2026-1530Z_0.mp3 -c:a copy ENZV5-Gnd-Aug-24-2026-1530Z.mp3
+LiveATC's mp3s carry no Xing/Info header, so players guess the duration from the bitrate
+and come out 8.9 s short over a 32 min file -- every seek drifts ~0.5% late. Remuxing with
+`-c:a copy` leaves the audio untouched and writes a real header with a seek table.
+
+./fix-mp3-headers.sh                     # audio/**, recursive, in place, safe to re-run
+./fix-mp3-headers.sh viewer/public/audio # the viewer serves its own copy -- do this too
 
 ffmpeg -i ENZV5-Gnd-Aug-24-2026-1530Z.mp3 -af "highpass=f=300, lowpass=f=3400, loudnorm=I=-16:TP=-1.5:LRA=11" -c:a libmp3lame -b:a 48k -ac 1 rec_norm.mp3
 
