@@ -48,7 +48,13 @@ fmt_ts() {
 # Print the non-silent intervals of $1 as "start end" pairs, one per line.
 speech_intervals() {
   local src="$1" total
-  total=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$src")
+  # Runs inside process substitution, so a failure here would not surface as an error --
+  # it would just yield no intervals and leave an empty transcript behind.
+  total=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$src" || true)
+  if [ -z "$total" ]; then
+    echo "  cannot read the duration of $src" >&2
+    return 1
+  fi
 
   ffmpeg -hide_banner -i "$src" -af "silencedetect=noise=${NOISE}:d=${DUR_SILENCE}" \
     -f null - 2>&1 |
@@ -95,11 +101,19 @@ for src in "${files[@]}"; do
   n=0
 
   while read -r start end; do
-    ffmpeg -v error -y -i "$src" -ss "$start" -to "$end" -c copy "$WORK/raw.wav"
+    ffmpeg -nostdin -v error -y -i "$src" -ss "$start" -to "$end" -c copy "$WORK/raw.wav"
 
     # Peak normalization. The dB suffix matters: a bare number is a linear multiplier.
-    peak=$(ffmpeg -i "$WORK/raw.wav" -af volumedetect -f null - 2>&1 |
-           sed -nE 's/.*max_volume: ([-0-9.]+) dB.*/\1/p')
+    #
+    # The `|| true` is load-bearing. ffmpeg exits non-zero on a slice with nothing
+    # decodable in it -- which the last interval of every recording is, since it runs
+    # into the frame LiveATC truncated mid-write. Under `pipefail` that status comes out
+    # of the pipeline and `set -e` then kills the run, and because ffmpeg's stderr went
+    # into the pipe and was swallowed by `sed -n`, it dies without printing a thing: the
+    # transcript is left on the screen and never reaches disk. Let it fail, and let the
+    # empty-peak check below do the job it was written for.
+    peak=$(ffmpeg -nostdin -i "$WORK/raw.wav" -af volumedetect -f null - 2>&1 |
+           sed -nE 's/.*max_volume: ([-0-9.]+) dB.*/\1/p' || true)
     if [ -z "$peak" ]; then
       echo "  skip ${start}-${end}: silent or unreadable" >&2
       continue
@@ -109,7 +123,7 @@ for src in "${files[@]}"; do
     # Sample rate is left alone -- whisper-cli reads the native 11025 Hz, and
     # resampling here only loses quality.
     seg="$WORK/${name}_$(fmt_ts "$start" | tr ':.' '__')"
-    ffmpeg -v error -y -i "$WORK/raw.wav" -af "volume=${gain}dB" "$seg.wav"
+    ffmpeg -nostdin -v error -y -i "$WORK/raw.wav" -af "volume=${gain}dB" "$seg.wav"
 
     # Quiet unless it actually fails -- the ggml backend chatter would bury the output.
     if ! "$WHISPER" -m "$MODEL" -f "$seg.wav" -l en -nt -np --prompt "$PROMPT" \
@@ -118,7 +132,17 @@ for src in "${files[@]}"; do
       exit 1
     fi
 
-    text=$(tr '\n' ' ' < "$seg.txt" | sed -E 's/^ +| +$//g; s/ +/ /g')
+    # Same trap as the peak pipeline above: if the file is missing, `tr` fails, pipefail
+    # carries that out of the substitution, and the run dies -- throwing away every line
+    # gathered for this recording. Only the missing case is worth a word; whisper writes
+    # an empty file for a segment it heard nothing in, which the -z check below already
+    # skips quietly, and saying so for every one of those would just be noise.
+    if [ ! -e "$seg.txt" ]; then
+      echo "  skip ${start}-${end}: whisper wrote no transcript file" >&2
+      continue
+    fi
+
+    text=$(tr '\n' ' ' < "$seg.txt" | sed -E 's/^ +| +$//g; s/ +/ /g' || true)
     if [ -z "$text" ] || [ "$text" = "[BLANK_AUDIO]" ]; then
       continue
     fi
