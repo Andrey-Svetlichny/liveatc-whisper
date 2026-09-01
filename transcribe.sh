@@ -15,7 +15,7 @@ MODEL="${MODEL:-$HOME/models/whisper/ggml-medium.en.bin}"
 NOISE="-50dB"     # everything below this counts as silence
 DUR_SILENCE="0.3" # ...for at least this long
 MIN_DUR="0.05"    # drop speech intervals shorter than this
-PEAK_DB="-3"      # normalization target: leave 3 dB of headroom
+PEAK_DB="0"       # normalization target: Whisper default -3 dB
 
 # Shaped like a real ENZV Ground exchange, which primes callsigns far better than a
 # keyword list does -- same prompt as transcript/transcribe.py, where it was picked by
